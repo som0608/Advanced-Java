@@ -1,14 +1,16 @@
 package com.example;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * A desktop GUI application for managing a personal book collection.
- * Supports adding, deleting, searching, and marking books as favorites.
+ * GUI for managing a collection of books.
+ * Supports adding, deleting, filtering, and genre management.
  */
 public class BookManagerGUI extends JFrame {
     private JTextField titleField;
@@ -17,100 +19,116 @@ public class BookManagerGUI extends JFrame {
     private JComboBox<String> genreInputBox;
     private JComboBox<String> genreFilterBox;
     private JCheckBox favoriteFilter;
+    private JButton resetButton;
+    private JButton manageGenresButton;
 
-    private DefaultListModel<String> listModel;
-    private JList<String> bookList;
-    private List<Book> currentBooks;
+    private BookTableModel tableModel;
+    private JTable bookTable;
 
     private BookDAO dao;
+    private List<Book> allBooks;
 
     /**
-     * Constructs the Book Manager GUI and initializes components and layout.
+     * Constructs the main GUI for the Book Manager application.
      */
     public BookManagerGUI() {
         super("Book Manager");
         dao = new BookDAO();
 
-        // --- Load genres ---
+        // Load genres from XML
         List<String> genres = GenreLoader.loadGenres();
-        genres.add(0, "-"); // "-" means "all genres"
+        genres.add(0, "-");
 
-        // --- Search Panel ---
+        // Top panel for filtering
         JPanel searchPanel = new JPanel();
-        searchField = new JTextField(20);
-        genreFilterBox = new JComboBox<>(genres.toArray(new String[0]));
-        favoriteFilter = new JCheckBox("Show only favorites");
+        searchField = new JTextField(15);
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { searchBooks(); }
+            public void removeUpdate(DocumentEvent e) { searchBooks(); }
+            public void changedUpdate(DocumentEvent e) { searchBooks(); }
+        });
 
-        JButton searchButton = new JButton("Search");
-        searchButton.addActionListener(this::searchBooks);
-        favoriteFilter.addActionListener(e -> searchBooks(null)); // re-search on checkbox toggle
+        genreFilterBox = new JComboBox<>(genres.toArray(new String[0]));
+        genreFilterBox.addActionListener(e -> searchBooks());
+
+        favoriteFilter = new JCheckBox("Favorites only");
+        favoriteFilter.addActionListener(e -> searchBooks());
+
+        resetButton = new JButton("Reset");
+        resetButton.addActionListener(e -> {
+            searchField.setText("");
+            genreFilterBox.setSelectedIndex(0);
+            favoriteFilter.setSelected(false);
+            searchBooks();
+        });
+
+        manageGenresButton = new JButton("Manage Genres");
+        manageGenresButton.addActionListener(e -> {
+            new GenreManagerDialog(this).setVisible(true);
+            reloadGenres();
+            refreshBookList();
+        });
 
         searchPanel.add(new JLabel("Keyword:"));
         searchPanel.add(searchField);
         searchPanel.add(genreFilterBox);
-        searchPanel.add(searchButton);
         searchPanel.add(favoriteFilter);
+        searchPanel.add(resetButton);
+        searchPanel.add(manageGenresButton);
 
-        // --- Input Panel ---
-        titleField = new JTextField(20);
-        authorField = new JTextField(20);
+        // Left panel for input
+        JPanel inputPanel = new JPanel(new GridLayout(4, 2));
+        titleField = new JTextField(15);
+        authorField = new JTextField(15);
         genreInputBox = new JComboBox<>(genres.subList(1, genres.size()).toArray(new String[0]));
 
         JButton addButton = new JButton("Add Book");
         addButton.addActionListener(this::addBook);
 
-        JPanel inputPanel = new JPanel(new GridLayout(4, 2));
         inputPanel.add(new JLabel("Title:"));
         inputPanel.add(titleField);
         inputPanel.add(new JLabel("Author:"));
         inputPanel.add(authorField);
         inputPanel.add(new JLabel("Genre:"));
         inputPanel.add(genreInputBox);
-        inputPanel.add(new JLabel(""));
+        inputPanel.add(new JLabel());
         inputPanel.add(addButton);
 
-        // --- Book List and Controls ---
-        listModel = new DefaultListModel<>();
-        bookList = new JList<>(listModel);
-        bookList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        // Table for books
+        allBooks = dao.getAllBooks();
+        tableModel = new BookTableModel(allBooks, dao);
+        bookTable = new JTable(tableModel);
+        JScrollPane tableScrollPane = new JScrollPane(bookTable);
 
-        JButton deleteButton = new JButton("Delete Selected Book");
+        // Bottom delete button
+        JButton deleteButton = new JButton("Delete Selected");
         deleteButton.addActionListener(this::deleteSelectedBook);
 
-        JButton favoriteButton = new JButton("Mark/Unmark as Favorite");
-        favoriteButton.addActionListener(this::markAsFavorite);
-
-        JPanel controlPanel = new JPanel(new GridLayout(2, 1));
-        controlPanel.add(favoriteButton);
-        controlPanel.add(deleteButton);
-
-        // --- Layout setup ---
+        // Layout
         setLayout(new BorderLayout());
-        add(searchPanel, BorderLayout.PAGE_START);
+        add(searchPanel, BorderLayout.NORTH);
         add(inputPanel, BorderLayout.WEST);
-        add(new JScrollPane(bookList), BorderLayout.CENTER);
-        add(controlPanel, BorderLayout.SOUTH);
+        add(tableScrollPane, BorderLayout.CENTER);
+        add(deleteButton, BorderLayout.SOUTH);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        pack();
+        setSize(800, 500);
+        setLocationRelativeTo(null);
         setVisible(true);
-
-        refreshBookList();
     }
 
     /**
-     * Handles the Add Book button click. Validates input and adds the book to the database.
+     * Adds a new book to the list and database.
+     *
+     * @param e the action event from the button
      */
     private void addBook(ActionEvent e) {
         String title = titleField.getText().trim();
         String author = authorField.getText().trim();
         String genre = (String) genreInputBox.getSelectedItem();
-
         if (!title.isEmpty() && !author.isEmpty()) {
-            Book book = new Book(title, author, genre);
-            dao.addBook(book);
+            dao.addBook(new Book(title, author, genre));
             refreshBookList();
-
             titleField.setText("");
             authorField.setText("");
             genreInputBox.setSelectedIndex(0);
@@ -120,13 +138,15 @@ public class BookManagerGUI extends JFrame {
     }
 
     /**
-     * Deletes the currently selected book from the list and database.
+     * Deletes the selected book from the table and database.
+     *
+     * @param e the action event from the button
      */
     private void deleteSelectedBook(ActionEvent e) {
-        int index = bookList.getSelectedIndex();
-        if (index >= 0) {
-            int bookId = currentBooks.get(index).getId();
-            dao.deleteBook(bookId);
+        int selectedRow = bookTable.getSelectedRow();
+        if (selectedRow >= 0) {
+            Book book = tableModel.getBookAt(selectedRow);
+            dao.deleteBook(book.getId());
             refreshBookList();
         } else {
             JOptionPane.showMessageDialog(this, "Please select a book to delete.");
@@ -134,56 +154,52 @@ public class BookManagerGUI extends JFrame {
     }
 
     /**
-     * Toggles the favorite status of the selected book.
+     * Filters the book list based on keyword, genre, and favorite flag.
      */
-    private void markAsFavorite(ActionEvent e) {
-        int index = bookList.getSelectedIndex();
-        if (index >= 0) {
-            Book selectedBook = currentBooks.get(index);
-            dao.setFavorite(selectedBook.getId(), !selectedBook.isFavorite());
-            refreshBookList();
-        } else {
-            JOptionPane.showMessageDialog(this, "Please select a book to mark/unmark as favorite.");
-        }
-    }
-
-    /**
-     * Performs a search based on the keyword, genre filter, and favorite checkbox.
-     */
-    private void searchBooks(ActionEvent e) {
+    private void searchBooks() {
         String keyword = searchField.getText().trim().toLowerCase();
-        String selectedGenre = (String) genreFilterBox.getSelectedItem();
-        boolean onlyFavorites = favoriteFilter.isSelected();
+        String genre = (String) genreFilterBox.getSelectedItem();
+        if (genre == null) return;
 
-        currentBooks = dao.getAllBooks().stream()
+        boolean onlyFav = favoriteFilter.isSelected();
+
+        List<Book> filtered = allBooks.stream()
             .filter(b -> b.getTitle().toLowerCase().contains(keyword)
                       || b.getAuthor().toLowerCase().contains(keyword)
                       || b.getGenre().toLowerCase().contains(keyword))
-            .filter(b -> selectedGenre.equals("-") || b.getGenre().equals(selectedGenre))
-            .filter(b -> !onlyFavorites || b.isFavorite())
+            .filter(b -> genre.equals("-") || b.getGenre().equals(genre))
+            .filter(b -> !onlyFav || b.isFavorite())
             .collect(Collectors.toList());
 
-        updateBookListDisplay();
+        tableModel.setBooks(filtered);
     }
 
     /**
-     * Reloads the list of books from the database and updates the display.
+     * Reloads all books from the database and updates the table.
      */
     private void refreshBookList() {
-        currentBooks = dao.getAllBooks();
-        updateBookListDisplay();
+        allBooks = dao.getAllBooks();
+        searchBooks();
     }
 
     /**
-     * Updates the GUI list display with the current book list.
-     * Adds a star to favorite books and displays all relevant info.
+     * Reloads genres from the XML file and updates the combo boxes.
      */
-    private void updateBookListDisplay() {
-        listModel.clear();
-        for (int i = 0; i < currentBooks.size(); i++) {
-            Book b = currentBooks.get(i);
-            String title = b.isFavorite() ? "⭐ " + b.getTitle() : b.getTitle();
-            listModel.addElement((i + 1) + ". " + title + " by " + b.getAuthor() + " (" + b.getGenre() + ")");
+    public void reloadGenres() {
+        List<String> genres = GenreLoader.loadGenres();
+
+        genreFilterBox.removeAllItems();
+        genreFilterBox.addItem("-");
+        for (String genre : genres) {
+            genreFilterBox.addItem(genre);
         }
+
+        genreInputBox.removeAllItems();
+        for (String genre : genres) {
+            genreInputBox.addItem(genre);
+        }
+
+        genreFilterBox.revalidate();
+        genreInputBox.revalidate();
     }
 }

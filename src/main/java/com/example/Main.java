@@ -13,6 +13,9 @@ public class Main {
      * @param args command-line arguments (not used)
      */
     public static void main(String[] args) {
-        javax.swing.SwingUtilities.invokeLater(BookManagerGUI::new);
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            BookManagerGUI gui = new BookManagerGUI();
+            gui.setVisible(true);
+        }); 
     }
 }
