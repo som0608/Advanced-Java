@@ -5,11 +5,13 @@ This application is a desktop-based Book Manager, allowing users to manage their
 It provides the following features:
 
 - Add a new book (title, author, genre)
-- Search books by keyword
+- Edit existing book entries directly in the table
+- Real-time search books by keyword
 - Filter books by genre
-- Mark or unmark books as favorites
+- Mark/unmark favorites via checkbox
 - View only favorite books
 - Delete selected books
+- Manage genres via a dedicated dialog (add, delete, save)
 - Load genre options from an external XML file (genres.xml)
 
 
@@ -43,23 +45,39 @@ Maven (for building and running the application)
         - Title: Harry Potter and the Sorcerer's Stone, Author: J.K. Rowling, Genre: Fantasy
 
 ### Search and Filter
-    Step1: Enter a keyword in the search bar to filter by title, author, or genre.
+    ・Type a keyword (partial match) to search title, author, or genre.
 
-    Step2: Select a genre from the genre filter dropdown (- means all genres).
+    ・Select a genre from the dropdown (default "-" shows all).
 
-    Step3: Check Show only favorites to limit results to favorites only.
+    ・Check Favorites only to view only books marked as favorites.
 
-    Step4: Click Search to apply filters.
+    ・All filters apply automatically as you type or select.
+
+    ・Click the Reset button to clear all filters and show the full book list.
 
 ### Mark/Unmark Favorite
-    Step1: Select a book from the list.
-
-    Step2: Click Mark/Unmark as Favorite.
+    Step1: In the table, toggle the checkbox under the "Favorite" column to mark or unmark a book.
 
 ### Delete a Book
     Step1: Select a book from the list.
 
     Step2: Click Delete Selected Book.
+
+### Manage genres
+    Step1:　Click the Manage Genres button to open the genre management dialog.
+
+    Step2: Inside the dialog, you can:
+
+            Add: Enter a new genre name.
+
+            Delete: Select and remove one or more genres.
+
+    Step3: Click Save button. Persist current genre list to genres.xml.
+
+    Step4: Click Close button. Close the dialog and reload the genre list in the main UI.
+
+    Genres are immediately reflected in dropdowns after closing the dialog.
+
 
 ## Additional Notes
 ### Genre Configuration: genres.xml
@@ -84,6 +102,10 @@ To add a new genre (e.g., "Science"), insert a new <genre> tag inside the <genre
 ```
 After editing the file, restart the application to apply the changes. The genre list is reloaded on startup.
 
+You can also edit genres from the GUI via Manage Genres, and the XML will be automatically updated.
+
 ### Data Storage
-All book data (including favorites) is stored locally in an SQLite database file: books.db
-This file is created automatically in the project root when the application runs for the first time.
+Book data is stored in an SQLite database file named:books.db
+    ・Created automatically in the project root.
+    ・Stores title, author, genre, and favorite status.
+    ・Persistent across application restarts.
